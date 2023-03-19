@@ -2,7 +2,13 @@
 pragma solidity ^0.8.13;
 
 contract Dex {
-    constructor(address _token1, address _token2) {}
+    mapping(address => uint256[2]) liquidityPool;
+    uint256[2] pool;
+    uint256 k;
+
+    constructor(address _token1, address _token2) {
+        k = _token1.balance * _token2.balance;
+    }
 
     function swap(
         uint256 tokenXAmount,
@@ -14,7 +20,11 @@ contract Dex {
         uint256 tokenXAmount,
         uint256 tokenYAmount,
         uint256 minimumLPTokenAmount
-    ) external returns (uint256 LPTokenAmount) {}
+    ) external returns (uint256 LPTokenAmount) {
+        require(tokenXAmount == tokenYAmount);
+
+        return tokenXAmount;
+    }
 
     function removeLiquidity(
         uint256 LPTokenAmount,
