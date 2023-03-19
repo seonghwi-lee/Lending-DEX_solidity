@@ -10,11 +10,14 @@ contract Dex {
     IERC20 private tokenY;
 
     address private owner;
-    mapping(address => uint) _lpBalances;
-    uint256 k;
+    mapping(address => uint) balances;
+    uint256 rootK; // equal to liquidity
+    uint256 reservedX;
+    uint256 reservedY;
+    uint256 _amountX;
+    uint256 _amountY;
 
     constructor(address _tokenX, address _tokenY) {
-        k = _tokenX.balance * _tokenY.balance;
         owner = msg.sender;
         tokenX = IERC20(_tokenX);
         tokenY = IERC20(_tokenY);
@@ -26,30 +29,53 @@ contract Dex {
         uint256 tokenMinimumOutputAmount
     ) external returns (uint256 outputAmount) {}
 
+    function setReserve(uint256 amountX, uint256 amountY) internal {
+        reservedX = tokenX.balanceOf(address(this)) + amountX;
+        reservedY = tokenY.balanceOf(address(this)) + amountY;
+        rootK = sqrt(reservedX * reservedY);
+    }
+
+    function setReserve() internal {
+        setReserve(0, 0);
+    }
+
+    function quote(uint256 amountX) internal returns (uint256 amountB) {
+        require(amountX > 0);
+        require(reservedX > 0 && reservedY > 0);
+
+        return (amountX * reservedY) / reservedX;
+    }
+
     function addLiquidity(
         uint256 tokenXAmount,
         uint256 tokenYAmount,
         uint256 minimumLPTokenAmount
     ) external returns (uint256 LPTokenAmount) {
-        require(tokenXAmount == tokenYAmount);
-        require(tokenXAmount != 0 && tokenYAmount != 0);
-        require(
-            tokenX.allowance(msg.sender, address(this)) >= tokenXAmount &&
-                tokenY.allowance(msg.sender, address(this)) >= tokenYAmount,
-            "ERC20: insufficient allowance"
-        );
-        require(
-            tokenX.balanceOf(msg.sender) >= tokenXAmount &&
-                tokenY.balanceOf(msg.sender) >= tokenYAmount,
-            "ERC20: transfer amount exceeds balance"
-        );
+        require(tokenXAmount > 0 && tokenYAmount > 0);
+        _amountX += tokenXAmount;
+        _amountY += tokenYAmount;
 
-        if (minimumLPTokenAmount > tokenXAmount) revert();
+        if (reservedX == 0 && reservedY == 0) {
+            setReserve(_amountX, _amountY);
+        }
 
-        tokenX.transferFrom(msg.sender, address(this), tokenXAmount);
-        tokenY.transferFrom(msg.sender, address(this), tokenYAmount);
-        _lpBalances[msg.sender] += tokenXAmount;
-        return tokenXAmount;
+        uint256 reward;
+        uint256 optToken = quote(tokenXAmount);
+        if (optToken > tokenYAmount) {
+            optToken = quote(tokenYAmount);
+            require(optToken == tokenXAmount);
+            tokenX.transferFrom(msg.sender, address(this), optToken);
+            tokenY.transferFrom(msg.sender, address(this), tokenYAmount);
+            reward = sqrt(optToken * tokenYAmount);
+        } else {
+            require(optToken == tokenYAmount);
+            tokenX.transferFrom(msg.sender, address(this), tokenXAmount);
+            tokenY.transferFrom(msg.sender, address(this), optToken);
+            reward = sqrt(optToken * tokenXAmount);
+        }
+
+        if (minimumLPTokenAmount > reward) revert();
+        return reward;
     }
 
     function removeLiquidity(
@@ -58,23 +84,33 @@ contract Dex {
         uint256 minimumTokenYAmount
     ) external returns (uint256 _tx, uint256 _ty) {
         require(LPTokenAmount != 0);
+
+        setReserve();
+        uint256 amountX = rootK / reservedX;
+        uint256 amountY = rootK / reservedY;
+
         require(
-            minimumTokenXAmount <= LPTokenAmount &&
-                minimumTokenYAmount <= LPTokenAmount
+            minimumTokenXAmount <= amountX && minimumTokenYAmount <= amountY
         );
-        require(this.transfer(msg.sender, LPTokenAmount));
-        return (LPTokenAmount, LPTokenAmount);
+
+        _amountX -= amountX;
+        _amountY -= amountY;
+
+        return (amountX, amountY);
     }
 
-    function transfer(address to, uint256 lpAmount) external returns (bool) {
-        require(to != address(0));
-        require(_lpBalances[to] >= lpAmount);
+    function transfer(address to, uint256 lpAmount) external returns (bool) {}
 
-        _lpBalances[to] -= lpAmount;
-
-        tokenX.transfer(to, lpAmount);
-        tokenY.transfer(to, lpAmount);
-
-        return true;
+    function sqrt(uint y) internal pure returns (uint z) {
+        if (y > 3) {
+            z = y;
+            uint x = y / 2 + 1;
+            while (x < z) {
+                z = x;
+                x = (y / x + x) / 2;
+            }
+        } else if (y != 0) {
+            z = 1;
+        }
     }
 }
