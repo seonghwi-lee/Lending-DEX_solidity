@@ -33,13 +33,12 @@ contract Dex {
         uint256 minimumLPTokenAmount
     ) external returns (uint256 LPTokenAmount) {
         require(tokenXAmount == tokenYAmount);
-        unchecked {
-            require(
-                tokenX.allowance(msg.sender, address(this)) >= tokenXAmount &&
-                    tokenY.allowance(msg.sender, address(this)) >= tokenYAmount,
-                "ERC20: insufficient allowance"
-            );
-        }
+        require(tokenXAmount != 0 && tokenYAmount != 0);
+        require(
+            tokenX.allowance(msg.sender, address(this)) >= tokenXAmount &&
+                tokenY.allowance(msg.sender, address(this)) >= tokenYAmount,
+            "ERC20: insufficient allowance"
+        );
         require(
             tokenX.balanceOf(msg.sender) >= tokenXAmount &&
                 tokenY.balanceOf(msg.sender) >= tokenYAmount,
