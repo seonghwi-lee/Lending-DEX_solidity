@@ -6,12 +6,11 @@ import {CustomERC20} from "../test/Dex.t.sol";
 import "../node_modules/@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract Dex {
-    mapping(address => uint256[2]) liquidityPool;
     IERC20 private tokenX;
     IERC20 private tokenY;
 
     address private owner;
-    uint256[2] pool;
+    mapping(address => uint) _lpBalances;
     uint256 k;
 
     constructor(address _tokenX, address _tokenY) {
@@ -49,7 +48,7 @@ contract Dex {
 
         tokenX.transferFrom(msg.sender, address(this), tokenXAmount);
         tokenY.transferFrom(msg.sender, address(this), tokenYAmount);
-
+        _lpBalances[msg.sender] += tokenXAmount;
         return tokenXAmount;
     }
 
@@ -57,7 +56,25 @@ contract Dex {
         uint256 LPTokenAmount,
         uint256 minimumTokenXAmount,
         uint256 minimumTokenYAmount
-    ) external returns (uint256 _tx, uint256 _ty) {}
+    ) external returns (uint256 _tx, uint256 _ty) {
+        require(LPTokenAmount != 0);
+        require(
+            minimumTokenXAmount <= LPTokenAmount &&
+                minimumTokenYAmount <= LPTokenAmount
+        );
+        require(this.transfer(msg.sender, LPTokenAmount));
+        return (LPTokenAmount, LPTokenAmount);
+    }
 
-    function transfer(address to, uint256 lpAmount) external returns (bool) {}
+    function transfer(address to, uint256 lpAmount) external returns (bool) {
+        require(to != address(0));
+        require(_lpBalances[to] >= lpAmount);
+
+        _lpBalances[to] -= lpAmount;
+
+        tokenX.transfer(to, lpAmount);
+        tokenY.transfer(to, lpAmount);
+
+        return true;
+    }
 }
