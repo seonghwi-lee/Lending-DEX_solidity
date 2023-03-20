@@ -101,11 +101,16 @@ contract Dex {
         uint256 minimumTokenYAmount
     ) external returns (uint256 _tx, uint256 _ty) {
         require(LPTokenAmount != 0);
-        uint256 users = totalReward / LPTokenAmount;
-
+        uint256 n = 10 ** 10;
+        uint256 users = (totalReward * n) / LPTokenAmount;
+        if (users % 10 != 0) {
+            users = totalReward / LPTokenAmount;
+            n = 1;
+        }
+        console.log("user:", users);
         setReserve();
-        uint256 amountX = reservedX / users;
-        uint256 amountY = reservedY / users;
+        uint256 amountX = (reservedX / users) * n;
+        uint256 amountY = (reservedY / users) * n;
         require(
             minimumTokenXAmount <= amountX && minimumTokenYAmount <= amountY
         );
@@ -129,9 +134,5 @@ contract Dex {
         } else if (y != 0) {
             z = 1;
         }
-    }
-
-    function advancedSqrt(uint x, uint y) internal pure returns (uint z) {
-        return (sqrt((x / 10 ** 8) * (y / 10 ** 8))) * 10 ** 8;
     }
 }
