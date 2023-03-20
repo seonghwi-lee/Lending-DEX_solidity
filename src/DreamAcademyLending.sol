@@ -42,8 +42,7 @@ contract DreamAcademyLending {
         if (tokenAddress == address(usdc)) {
             require(amount <= usdc.allowance(msg.sender, address(this)));
             _reserve[msg.sender][tokenAddress] += amount;
-            getReserve();
-
+            _totalReserve[msg.sender] += getReserve();
             usdc.transferFrom(
                 msg.sender,
                 address(this),
@@ -59,15 +58,15 @@ contract DreamAcademyLending {
 
     function borrow(address tokenAddress, uint256 amount) external {
         if (tokenAddress == address(usdc)) {
-            console.log("test:", getReserve());
-            require(_totalReserve[msg.sender] <= getReserve() / 100);
-
-            usdc.transfer(
-                msg.sender,
-                amount + _reserve[msg.sender][tokenAddress]
+            require(
+                amount + getBorrowed() <= (getReserve() * loanToValue) / 100
             );
 
+            usdc.transfer(msg.sender, amount);
+
             _borrowed[msg.sender][tokenAddress] += amount;
+        } else {
+            require(getReserve() >= amount + getBorrowed());
         }
     }
 
@@ -87,7 +86,6 @@ contract DreamAcademyLending {
         reserveValue =
             getCurReserveValue(address(0)) +
             getCurReserveValue(address(usdc));
-        _totalReserve[msg.sender] += reserveValue;
     }
 
     function getCurReserveValue(
@@ -102,7 +100,6 @@ contract DreamAcademyLending {
         borrowValue =
             getBorrowValue(address(0)) +
             getBorrowValue(address(usdc));
-        _totalBorrowed[msg.sender] += borrowValue;
     }
 
     function getBorrowValue(
