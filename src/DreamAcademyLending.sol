@@ -58,6 +58,7 @@ contract DreamAcademyLending {
 
     function borrow(address tokenAddress, uint256 amount) external {
         if (tokenAddress == address(usdc)) {
+            console.log(getBorrowed(), getReserve());
             require(
                 amount + getBorrowed() <= (getReserve() * loanToValue) / 100
             );
@@ -105,8 +106,6 @@ contract DreamAcademyLending {
     function getBorrowValue(
         address tokenAddress
     ) internal returns (uint256 totalBorrow) {
-        totalBorrow =
-            (_borrowed[msg.sender][tokenAddress]) *
-            dreamOracle.getPrice(tokenAddress);
+        totalBorrow = (_borrowed[msg.sender][tokenAddress]);
     }
 }
