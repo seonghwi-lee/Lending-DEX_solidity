@@ -4,6 +4,8 @@ pragma solidity ^0.8.13;
 import {CustomERC20} from "../test/Dex.t.sol";
 
 import "../node_modules/@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "../lib/forge-std/src/Test.sol";
+import "forge-std/console.sol";
 
 contract Dex {
     IERC20 private tokenX;
@@ -14,8 +16,13 @@ contract Dex {
     uint256 rootK; // equal to liquidity
     uint256 reservedX;
     uint256 reservedY;
+    uint256 curX;
+    uint256 curY;
+    uint256 preX;
+    uint256 preY;
     uint256 _amountX;
     uint256 _amountY;
+    uint256 totalReward;
 
     constructor(address _tokenX, address _tokenY) {
         owner = msg.sender;
@@ -32,7 +39,15 @@ contract Dex {
     function setReserve(uint256 amountX, uint256 amountY) internal {
         reservedX = tokenX.balanceOf(address(this)) + amountX;
         reservedY = tokenY.balanceOf(address(this)) + amountY;
-        rootK = sqrt(reservedX * reservedY);
+
+        if (preX == 0 && preY == 0) {
+            curX = tokenX.balanceOf(address(this)) + amountX - preX;
+            curY = tokenY.balanceOf(address(this)) + amountY - preY;
+        } else {
+            curX = amountX;
+            curY = amountY;
+        }
+        rootK = sqrt(curX * curY);
     }
 
     function setReserve() internal {
@@ -55,26 +70,28 @@ contract Dex {
         _amountX += tokenXAmount;
         _amountY += tokenYAmount;
 
-        if (reservedX == 0 && reservedY == 0) {
-            setReserve(_amountX, _amountY);
-        }
+        setReserve(tokenXAmount, tokenYAmount);
 
         uint256 reward;
-        uint256 optToken = quote(tokenXAmount);
-        if (optToken > tokenYAmount) {
-            optToken = quote(tokenYAmount);
-            require(optToken == tokenXAmount);
+        uint256 optToken = quote(curX);
+        if (optToken > curY) {
+            optToken = quote(curY);
+            require(optToken == curX);
             tokenX.transferFrom(msg.sender, address(this), optToken);
             tokenY.transferFrom(msg.sender, address(this), tokenYAmount);
-            reward = sqrt(optToken * tokenYAmount);
+            reward = sqrt(optToken * curY);
         } else {
-            require(optToken == tokenYAmount);
+            require(optToken == curY);
             tokenX.transferFrom(msg.sender, address(this), tokenXAmount);
             tokenY.transferFrom(msg.sender, address(this), optToken);
-            reward = sqrt(optToken * tokenXAmount);
+            reward = sqrt(optToken * curX);
         }
 
+        preX = tokenX.balanceOf(address(this));
+        preY = tokenY.balanceOf(address(this));
+
         if (minimumLPTokenAmount > reward) revert();
+        totalReward += reward;
         return reward;
     }
 
@@ -84,11 +101,11 @@ contract Dex {
         uint256 minimumTokenYAmount
     ) external returns (uint256 _tx, uint256 _ty) {
         require(LPTokenAmount != 0);
+        uint256 users = totalReward / LPTokenAmount;
 
         setReserve();
-        uint256 amountX = rootK / reservedX;
-        uint256 amountY = rootK / reservedY;
-
+        uint256 amountX = reservedX / users;
+        uint256 amountY = reservedY / users;
         require(
             minimumTokenXAmount <= amountX && minimumTokenYAmount <= amountY
         );
@@ -112,5 +129,9 @@ contract Dex {
         } else if (y != 0) {
             z = 1;
         }
+    }
+
+    function advancedSqrt(uint x, uint y) internal pure returns (uint z) {
+        return (sqrt((x / 10 ** 8) * (y / 10 ** 8))) * 10 ** 8;
     }
 }
