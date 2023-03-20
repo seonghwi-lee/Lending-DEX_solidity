@@ -19,6 +19,7 @@ contract Dex {
     uint256 _amountX;
     uint256 _amountY;
     uint256 totalReward;
+    uint256 reward;
     uint256 feeRate;
 
     constructor(address _tokenX, address _tokenY) {
@@ -105,26 +106,43 @@ contract Dex {
     ) external returns (uint256 LPTokenAmount) {
         require(tokenXAmount > 0 && tokenYAmount > 0);
         setReserve(tokenXAmount, tokenYAmount);
-
-        uint256 reward;
+        uint256 liquidity;
         uint256 optToken = quote(curX, reservedX, reservedY);
         if (optToken > curY) {
             optToken = quote(curY, reservedY, reservedX);
             require(optToken == curX);
             tokenX.transferFrom(msg.sender, address(this), optToken);
             tokenY.transferFrom(msg.sender, address(this), tokenYAmount);
-            reward = sqrt(optToken * curY);
+            liquidity = sqrt(optToken * tokenYAmount);
         } else {
             require(optToken == curY);
             tokenX.transferFrom(msg.sender, address(this), tokenXAmount);
             tokenY.transferFrom(msg.sender, address(this), optToken);
-            reward = sqrt(optToken * curX);
+            liquidity = sqrt(optToken * tokenXAmount);
+        }
+
+        if (optToken > curY) {
+            if (sqrt((reservedX * reservedY) / (curX * curY)) == 1) {
+                reward = liquidity;
+            } else {
+                reward =
+                    (sqrt((reservedX * reservedY) / (curX * curY)) - 1) *
+                    reward;
+            }
+            setReserve(optToken, tokenYAmount);
+        } else {
+            if (sqrt((reservedX * reservedY) / (curX * curY)) == 1) {
+                reward = liquidity;
+            } else {
+                reward =
+                    (sqrt((reservedX * reservedY) / (curX * curY)) - 1) *
+                    reward;
+            }
+            setReserve(tokenXAmount, optToken);
         }
 
         preX = tokenX.balanceOf(address(this));
         preY = tokenY.balanceOf(address(this));
-
-        setReserve();
 
         if (minimumLPTokenAmount > reward) revert();
         totalReward += reward;
