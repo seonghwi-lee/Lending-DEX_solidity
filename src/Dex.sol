@@ -23,18 +23,31 @@ contract Dex {
     uint256 _amountX;
     uint256 _amountY;
     uint256 totalReward;
+    uint256 feeRate;
 
     constructor(address _tokenX, address _tokenY) {
         owner = msg.sender;
         tokenX = IERC20(_tokenX);
         tokenY = IERC20(_tokenY);
+        feeRate = 1000;
     }
 
     function swap(
         uint256 tokenXAmount,
         uint256 tokenYAmount,
         uint256 tokenMinimumOutputAmount
-    ) external returns (uint256 outputAmount) {}
+    ) external returns (uint256 outputAmount) {
+        uint256 tokenFrom;
+        uint256 tokenTo;
+        (tokenFrom, tokenTo) = tokenXAmount == 0
+            ? (tokenYAmount, tokenXAmount)
+            : (tokenXAmount, tokenYAmount);
+        outputAmount = uint256(
+            -(int(reservedX * reservedY) / int(reservedX + 300 ether)) +
+                int(reservedY)
+        );
+        outputAmount = (outputAmount * (feeRate - 1)) / feeRate;
+    }
 
     function setReserve(uint256 amountX, uint256 amountY) internal {
         reservedX = tokenX.balanceOf(address(this)) + amountX;
