@@ -2,8 +2,9 @@
 pragma solidity ^0.8.13;
 
 import "../node_modules/@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "../node_modules/@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-contract Dex {
+contract Dex is ERC20 {
     IERC20 private tokenX;
     IERC20 private tokenY;
 
@@ -16,13 +17,11 @@ contract Dex {
     uint256 curY;
     uint256 preX;
     uint256 preY;
-    uint256 _amountX;
-    uint256 _amountY;
-    uint256 totalReward;
+    mapping(address => uint256) totalReward;
     uint256 reward;
     uint256 feeRate;
 
-    constructor(address _tokenX, address _tokenY) {
+    constructor(address _tokenX, address _tokenY) ERC20("LPToken", "LPT") {
         owner = msg.sender;
         tokenX = IERC20(_tokenX);
         tokenY = IERC20(_tokenY);
@@ -145,7 +144,7 @@ contract Dex {
         preY = tokenY.balanceOf(address(this));
 
         if (minimumLPTokenAmount > reward) revert();
-        totalReward += reward;
+        totalReward[msg.sender] += reward;
         return reward;
     }
 
@@ -155,11 +154,13 @@ contract Dex {
         uint256 minimumTokenYAmount
     ) external returns (uint256 _tx, uint256 _ty) {
         require(LPTokenAmount != 0);
+        require(totalReward[msg.sender] >= LPTokenAmount);
+        totalReward[msg.sender] -= LPTokenAmount;
         uint256 n = 10 ** 5;
-        uint256 users = (totalReward * n) / LPTokenAmount;
+        uint256 users = (totalReward[msg.sender] * n) / LPTokenAmount;
 
         if (users % 10 != 0) {
-            users = totalReward / LPTokenAmount;
+            users = totalReward[msg.sender] / LPTokenAmount;
             n = 1;
         }
 
@@ -176,7 +177,7 @@ contract Dex {
         return (amountX, amountY);
     }
 
-    function transfer(address to, uint256 lpAmount) external returns (bool) {}
+    // function transfer(address to, uint256 lpAmount) external returns (bool) {}
 
     function sqrt(uint y) internal pure returns (uint z) {
         if (y > 3) {
