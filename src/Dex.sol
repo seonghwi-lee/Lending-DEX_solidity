@@ -1,11 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import {CustomERC20} from "../test/Dex.t.sol";
-
 import "../node_modules/@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "../lib/forge-std/src/Test.sol";
-import "forge-std/console.sol";
 
 contract Dex {
     IERC20 private tokenX;
@@ -62,12 +58,6 @@ contract Dex {
 
         setReserve();
         outputAmount = (outputAmount * (feeRate - 1)) / feeRate;
-
-        console.log("tokenX: ", tokenX.balanceOf(address(this)));
-        console.log("tokenY: ", tokenY.balanceOf(address(this)));
-        // console.log("tokenFrom", tokenFrom);
-        // console.log("outputAmount", outputAmount);
-        console.log();
 
         if (tokenXAmount == 0) {
             tokenX.transfer(msg.sender, outputAmount);
