@@ -13,22 +13,27 @@ interface IPriceOracle {
 contract DreamAcademyLending {
     IERC20 usdc;
     IPriceOracle dreamOracle;
-    mapping(address => uint256) _balance;
+    mapping(address => uint256) _reserve;
+    mapping(address => uint256) _borrowed;
+    uint256 loanToValue;
+    uint256 liquidThreshold;
 
     constructor(IPriceOracle _dreamOracle, address _tokenAddress) {
         dreamOracle = _dreamOracle;
         usdc = IERC20(_tokenAddress);
+        loanToValue = 50;
+        liquidThreshold = 75;
     }
 
     function initializeLendingProtocol(address tokenAddress) external payable {
         require(tokenAddress != address(0));
         require(msg.value > 0);
 
-        _balance[msg.sender] += msg.value;
+        _reserve[msg.sender] += msg.value;
     }
 
     function balance() public view returns (uint256 amount) {
-        return _balance[msg.sender];
+        return _reserve[msg.sender];
     }
 
     function getAccruedSupplyAmount(
@@ -36,21 +41,35 @@ contract DreamAcademyLending {
     ) external returns (uint256 amount) {}
 
     function deposit(address tokenAddress, uint256 amount) external payable {
-        if (tokenAddress == address(0)) {
-            require(msg.value > 0);
-            require(msg.value >= amount);
-            _balance[msg.sender] += amount;
-        } else {
+        if (tokenAddress == address(usdc)) {
             require(amount <= usdc.allowance(msg.sender, address(this)));
             usdc.transferFrom(
                 msg.sender,
                 address(this),
-                amount + _balance[msg.sender]
+                amount + _reserve[msg.sender]
             );
+        } else {
+            require(msg.value >= amount);
+            _reserve[msg.sender] += amount;
         }
     }
 
-    function borrow(address tokenAddress, uint256 amount) external {}
+    function borrow(address tokenAddress, uint256 amount) external {
+        uint256 curValue = dreamOracle.getPrice(tokenAddress) * (amount / 1e18);
+        if (tokenAddress == address(usdc)) {
+            require(
+                curValue + _borrowed[msg.sender] <=
+                    (dreamOracle.getPrice(address(usdc)) *
+                        (_reserve[msg.sender] / 1e18) *
+                        loanToValue) /
+                        100
+            );
+            _reserve[msg.sender] += curValue;
+            _borrowed[msg.sender] += curValue;
+
+            usdc.transfer(msg.sender, amount);
+        }
+    }
 
     function repay(address tokenAddress, uint256 amount) external {}
 
