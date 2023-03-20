@@ -17,7 +17,8 @@ contract Dex is ERC20 {
     uint256 curY;
     uint256 preX;
     uint256 preY;
-    mapping(address => uint256) totalReward;
+    uint256 totalReward;
+    mapping(address => uint256) rewards;
     uint256 reward;
     uint256 feeRate;
 
@@ -144,7 +145,8 @@ contract Dex is ERC20 {
         preY = tokenY.balanceOf(address(this));
 
         if (minimumLPTokenAmount > reward) revert();
-        totalReward[msg.sender] += reward;
+        rewards[msg.sender] += reward;
+        totalReward += reward;
         return reward;
     }
 
@@ -154,16 +156,18 @@ contract Dex is ERC20 {
         uint256 minimumTokenYAmount
     ) external returns (uint256 _tx, uint256 _ty) {
         require(LPTokenAmount != 0);
-        require(totalReward[msg.sender] >= LPTokenAmount);
-        totalReward[msg.sender] -= LPTokenAmount;
+        require(rewards[msg.sender] >= LPTokenAmount);
+        rewards[msg.sender] -= LPTokenAmount;
+
         uint256 n = 10 ** 5;
-        uint256 users = (totalReward[msg.sender] * n) / LPTokenAmount;
+        uint256 users = (totalReward * n) / LPTokenAmount;
 
         if (users % 10 != 0) {
-            users = totalReward[msg.sender] / LPTokenAmount;
+            users = totalReward / LPTokenAmount;
             n = 1;
         }
 
+        totalReward -= LPTokenAmount;
         setReserve();
         uint256 amountX = (reservedX / users) * n;
         uint256 amountY = (reservedY / users) * n;
@@ -173,6 +177,7 @@ contract Dex is ERC20 {
 
         reservedX -= amountX;
         reservedY -= amountY;
+        setReserve();
 
         return (amountX, amountY);
     }
