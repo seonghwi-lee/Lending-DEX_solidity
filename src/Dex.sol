@@ -37,16 +37,46 @@ contract Dex {
         uint256 tokenYAmount,
         uint256 tokenMinimumOutputAmount
     ) external returns (uint256 outputAmount) {
+        require(tokenXAmount == 0 || tokenYAmount == 0);
         uint256 tokenFrom;
         uint256 tokenTo;
-        (tokenFrom, tokenTo) = tokenXAmount == 0
+        (tokenFrom, tokenTo) = (tokenXAmount == 0)
             ? (tokenYAmount, tokenXAmount)
             : (tokenXAmount, tokenYAmount);
-        outputAmount = uint256(
-            -(int(reservedX * reservedY) / int(reservedX + 300 ether)) +
-                int(reservedY)
-        );
+
+        setReserve();
+
+        if (tokenXAmount == 0) {
+            tokenY.transferFrom(msg.sender, address(this), tokenFrom);
+            outputAmount = uint256(
+                -(int(reservedY * reservedX) / int(reservedY + tokenFrom)) +
+                    int(reservedX)
+            );
+        } else {
+            tokenX.transferFrom(msg.sender, address(this), tokenFrom);
+            outputAmount = uint256(
+                -(int(reservedX * reservedY) / int(reservedX + tokenFrom)) +
+                    int(reservedY)
+            );
+        }
+
+        setReserve();
         outputAmount = (outputAmount * (feeRate - 1)) / feeRate;
+
+        console.log("tokenX: ", tokenX.balanceOf(address(this)));
+        console.log("tokenY: ", tokenY.balanceOf(address(this)));
+        // console.log("tokenFrom", tokenFrom);
+        // console.log("outputAmount", outputAmount);
+        console.log();
+
+        if (tokenXAmount == 0) {
+            tokenX.transfer(msg.sender, outputAmount);
+        } else {
+            tokenY.transfer(msg.sender, outputAmount);
+        }
+        setReserve();
+
+        require(outputAmount >= tokenMinimumOutputAmount);
     }
 
     function setReserve(uint256 amountX, uint256 amountY) internal {
@@ -60,18 +90,22 @@ contract Dex {
             curX = amountX;
             curY = amountY;
         }
-        rootK = sqrt(curX * curY);
+        rootK = sqrt(reservedX * reservedY);
     }
 
     function setReserve() internal {
         setReserve(0, 0);
     }
 
-    function quote(uint256 amountX) internal returns (uint256 amountB) {
+    function quote(
+        uint256 amountX,
+        uint256 _reservedX,
+        uint256 _reservedY
+    ) internal returns (uint256 amountY) {
         require(amountX > 0);
-        require(reservedX > 0 && reservedY > 0);
+        require(_reservedX > 0 && _reservedY > 0);
 
-        return (amountX * reservedY) / reservedX;
+        amountY = (amountX * _reservedY) / _reservedX;
     }
 
     function addLiquidity(
@@ -80,15 +114,12 @@ contract Dex {
         uint256 minimumLPTokenAmount
     ) external returns (uint256 LPTokenAmount) {
         require(tokenXAmount > 0 && tokenYAmount > 0);
-        _amountX += tokenXAmount;
-        _amountY += tokenYAmount;
-
         setReserve(tokenXAmount, tokenYAmount);
 
         uint256 reward;
-        uint256 optToken = quote(curX);
+        uint256 optToken = quote(curX, reservedX, reservedY);
         if (optToken > curY) {
-            optToken = quote(curY);
+            optToken = quote(curY, reservedY, reservedX);
             require(optToken == curX);
             tokenX.transferFrom(msg.sender, address(this), optToken);
             tokenY.transferFrom(msg.sender, address(this), tokenYAmount);
@@ -103,6 +134,8 @@ contract Dex {
         preX = tokenX.balanceOf(address(this));
         preY = tokenY.balanceOf(address(this));
 
+        setReserve();
+
         if (minimumLPTokenAmount > reward) revert();
         totalReward += reward;
         return reward;
@@ -114,13 +147,14 @@ contract Dex {
         uint256 minimumTokenYAmount
     ) external returns (uint256 _tx, uint256 _ty) {
         require(LPTokenAmount != 0);
-        uint256 n = 10 ** 10;
+        uint256 n = 10 ** 5;
         uint256 users = (totalReward * n) / LPTokenAmount;
+
         if (users % 10 != 0) {
             users = totalReward / LPTokenAmount;
             n = 1;
         }
-        console.log("user:", users);
+
         setReserve();
         uint256 amountX = (reservedX / users) * n;
         uint256 amountY = (reservedY / users) * n;
@@ -128,8 +162,8 @@ contract Dex {
             minimumTokenXAmount <= amountX && minimumTokenYAmount <= amountY
         );
 
-        _amountX -= amountX;
-        _amountY -= amountY;
+        reservedX -= amountX;
+        reservedY -= amountY;
 
         return (amountX, amountY);
     }
