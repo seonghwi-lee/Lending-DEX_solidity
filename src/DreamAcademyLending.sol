@@ -2,6 +2,7 @@
 pragma solidity ^0.8.13;
 
 import "../node_modules/@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "forge-std/console.sol";
 
 interface IPriceOracle {
     function getPrice(address token) external view returns (uint256);
@@ -16,8 +17,11 @@ contract DreamAcademyLending {
     mapping(address => mapping(address => uint256)) _borrowed;
     mapping(address => uint256) _totalReserve;
     mapping(address => uint256) _totalBorrowed;
+    mapping(address => uint256) _borrwedTime;
     uint256 loanToValue;
     uint256 liquidThreshold;
+    uint256 constant INTEREST_RATE = 100000013;
+    uint256 constant INTEREST_RATE2 = 100000000;
 
     constructor(IPriceOracle _dreamOracle, address _tokenAddress) {
         dreamOracle = _dreamOracle;
@@ -51,11 +55,14 @@ contract DreamAcademyLending {
         } else {
             require(msg.value >= amount);
             _reserve[msg.sender][tokenAddress] += amount;
-            getReserve();
+            _totalReserve[msg.sender] += getReserve();
         }
     }
 
     function borrow(address tokenAddress, uint256 amount) external {
+        if (_borrwedTime[msg.sender] == 0) {
+            _borrwedTime[msg.sender] = block.number;
+        }
         if (tokenAddress == address(usdc)) {
             require(
                 amount + getBorrowed() <= (getReserve() * loanToValue) / 100
@@ -66,7 +73,7 @@ contract DreamAcademyLending {
             require(getReserve() >= amount + getBorrowed());
         }
         _borrowed[msg.sender][tokenAddress] += amount;
-        _totalBorrowed[msg.sender] += amount;
+        _totalBorrowed[msg.sender] = getBorrowed();
     }
 
     function repay(address tokenAddress, uint256 amount) external {}
@@ -92,6 +99,43 @@ contract DreamAcademyLending {
 
     function withdraw(address tokenAddress, uint256 amount) external {
         require(checkLT(tokenAddress, amount));
+        uint256 blockDist = (block.number - _borrwedTime[msg.sender]);
+        console.log("time : ", blockDist);
+        uint256 interestRate;
+        interestRate = getBorrowed();
+
+        if (interestRate > 0) {
+            if (blockDist >= 500) {
+                while (blockDist > 0) {
+                    blockDist -= 500;
+                    interestRate =
+                        ((interestRate * (1000069412154265))) /
+                        (1000000000000000);
+                }
+            } else {
+                interestRate =
+                    ((interestRate * INTEREST_RATE ** blockDist)) /
+                    (INTEREST_RATE2 ** blockDist);
+            }
+            console.log(
+                "TMP",
+                _totalBorrowed[msg.sender],
+                interestRate,
+                INTEREST_RATE ** blockDist
+            );
+
+            require(
+                ((100 * interestRate) /
+                    (getReserve() -
+                        (amount * dreamOracle.getPrice(tokenAddress)) /
+                        1e18) <
+                    liquidThreshold),
+                "error"
+            );
+        } else {
+            require(_reserve[msg.sender][tokenAddress] >= amount);
+        }
+
         _reserve[msg.sender][tokenAddress] -= amount;
     }
 
