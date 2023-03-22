@@ -19,6 +19,7 @@ contract DreamAcademyLending {
     mapping(address => uint256) _totalBorrowed;
     mapping(address => uint256) _reservedTime;
     mapping(address => uint256) _borrwedTime;
+    mapping(address => bool) _borrowedChk;
     address[] users;
     uint256 usersCount;
     uint256 _totalReservePool;
@@ -59,26 +60,13 @@ contract DreamAcademyLending {
         address tokenAddress
     ) public returns (uint256 amount) {
         setTotalPool();
-        console.log(
-            "_totalReservePool",
-            getCurReserveValue(tokenAddress),
-            _totalReservePool,
-            getBorrowInterestRate(_totalBorrowPool)
-        );
         if (_totalReservePool != 0) {
             if (_totalBorrowPool != 0) {
-                console.log(
-                    "deep..",
-                    (getCurReserveValue(tokenAddress) *
-                        getBorrowInterestRate(_totalBorrowPool)) /
-                        _totalReservePool
-                );
                 amount =
                     getCurReserveValue(tokenAddress) +
                     ((getCurReserveValue(tokenAddress) *
-                        getBorrowInterestRate(_totalBorrowPool)) /
-                        _totalReservePool) -
-                    _totalBorrowPool;
+                        (getBorrowInterestRate(_totalBorrowPool) -
+                            _totalBorrowPool)) / _totalReservePool);
             } else {
                 amount = getCurReserveValue(tokenAddress);
             }
@@ -110,8 +98,9 @@ contract DreamAcademyLending {
     }
 
     function borrow(address tokenAddress, uint256 amount) external {
-        if (_borrwedTime[msg.sender] == 0) {
+        if (!_borrowedChk[msg.sender]) {
             _borrwedTime[msg.sender] = block.number;
+            _borrowedChk[msg.sender] = true;
         }
         if (tokenAddress == address(usdc)) {
             require(
@@ -138,17 +127,12 @@ contract DreamAcademyLending {
         address tokenAddress,
         uint256 amount
     ) internal returns (bool) {
-        console.log("checkLT", getAccruedSupplyAmount(tokenAddress), amount);
         require(getAccruedSupplyAmount(tokenAddress) >= amount);
-        console.log(
-            "checkLT totalReserve",
-            _totalReserve[msg.sender],
-            (amount * dreamOracle.getPrice(tokenAddress)) / 1e18
-        );
-        uint256 LT = ((_totalReserve[msg.sender] -
+
+        uint256 LT = ((getAccruedSupplyAmount(tokenAddress) -
             (amount * dreamOracle.getPrice(tokenAddress)) /
             1e18) * liquidThreshold) / 100;
-        console.log("LT : ", LT);
+
         if (LT >= _totalBorrowed[msg.sender]) {
             return true;
         }
@@ -160,14 +144,14 @@ contract DreamAcademyLending {
     ) internal returns (uint256 interestRate) {
         uint256 blockDist = (block.number - _borrwedTime[msg.sender]);
         interestRate = amount;
-        console.log("getBorrowIR", interestRate, blockDist);
         if (blockDist >= 500) {
             blockDist -= blockDist % 500;
+
             while (blockDist > 0) {
-                blockDist -= 500;
+                blockDist -= (86400 / 12) * 500;
                 interestRate =
-                    ((interestRate * (1000069412154265))) /
-                    (1000000000000000);
+                    ((interestRate * (16483094164129481))) /
+                    (10000000000000000);
             }
         } else {
             interestRate =
@@ -179,25 +163,17 @@ contract DreamAcademyLending {
     function withdraw(address tokenAddress, uint256 amount) external {
         require(checkLT(tokenAddress, amount));
 
-        uint256 interestRate = getBorrowInterestRate(
-            (amount * dreamOracle.getPrice(tokenAddress)) / 1e18
-        );
+        uint256 interestRate = getAccruedSupplyAmount(tokenAddress);
 
         _totalBorrowed[msg.sender] = getBorrowed();
         if (interestRate > 0 && _totalBorrowed[msg.sender] > 0) {
-            console.log(
-                "withdraw",
-                getReserve(),
-                (amount * dreamOracle.getPrice(tokenAddress)) / 1e18,
-                interestRate
-            );
             require(
                 getReserve() >
                     (amount * dreamOracle.getPrice(tokenAddress)) / 1e18
             );
 
             require(
-                ((100 * (getBorrowInterestRate(_totalBorrowed[msg.sender]))) /
+                ((100 * (getBorrowInterestRate(amount))) /
                     (
                         (getReserve() -
                             (amount * dreamOracle.getPrice(tokenAddress)) /
@@ -207,11 +183,23 @@ contract DreamAcademyLending {
                 "error"
             );
         } else {
-            require(_reserve[msg.sender][tokenAddress] >= amount);
+            require(interestRate >= amount);
         }
-        payable(msg.sender).call{value: amount}("");
-        _reserve[msg.sender][tokenAddress] -= amount;
+
+        if (tokenAddress == address(usdc)) {
+            usdc.transfer(msg.sender, amount);
+        } else {
+            payable(msg.sender).call{value: amount}("");
+        }
         getReserve();
+
+        if (_totalReserve[msg.sender] >= amount) {
+            _totalReserve[msg.sender] -= amount;
+            _totalReservePool -= amount;
+        } else {
+            _totalReserve[msg.sender] = 0;
+            _totalReservePool -= amount;
+        }
     }
 
     receive() external payable {}
