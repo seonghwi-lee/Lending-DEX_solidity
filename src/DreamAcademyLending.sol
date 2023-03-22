@@ -2,7 +2,6 @@
 pragma solidity ^0.8.13;
 
 import "../node_modules/@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "forge-std/console.sol";
 
 interface IPriceOracle {
     function getPrice(address token) external view returns (uint256);
@@ -58,17 +57,16 @@ contract DreamAcademyLending {
 
     function borrow(address tokenAddress, uint256 amount) external {
         if (tokenAddress == address(usdc)) {
-            console.log(getBorrowed(), getReserve());
             require(
                 amount + getBorrowed() <= (getReserve() * loanToValue) / 100
             );
 
             usdc.transfer(msg.sender, amount);
-
-            _borrowed[msg.sender][tokenAddress] += amount;
         } else {
             require(getReserve() >= amount + getBorrowed());
         }
+        _borrowed[msg.sender][tokenAddress] += amount;
+        _totalBorrowed[msg.sender] += amount;
     }
 
     function repay(address tokenAddress, uint256 amount) external {}
@@ -79,7 +77,24 @@ contract DreamAcademyLending {
         uint256 amount
     ) external {}
 
-    function withdraw(address tokenAddress, uint256 amount) external {}
+    function checkLTV(
+        address tokenAddress,
+        uint256 amount
+    ) internal view returns (bool) {
+        if (
+            ((_reserve[msg.sender][tokenAddress] - amount) * loanToValue) /
+                100 >=
+            _totalBorrowed[msg.sender]
+        ) {
+            return true;
+        }
+        return false;
+    }
+
+    function withdraw(address tokenAddress, uint256 amount) external {
+        require(checkLTV(tokenAddress, amount));
+        _reserve[msg.sender][tokenAddress] -= amount;
+    }
 
     receive() external payable {}
 
@@ -105,7 +120,7 @@ contract DreamAcademyLending {
 
     function getBorrowValue(
         address tokenAddress
-    ) internal returns (uint256 totalBorrow) {
-        totalBorrow = (_borrowed[msg.sender][tokenAddress]);
+    ) internal returns (uint256 borrowValue) {
+        borrowValue = (_borrowed[msg.sender][tokenAddress]);
     }
 }
