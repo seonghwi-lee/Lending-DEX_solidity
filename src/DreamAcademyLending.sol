@@ -77,22 +77,21 @@ contract DreamAcademyLending {
         uint256 amount
     ) external {}
 
-    function checkLTV(
+    function checkLT(
         address tokenAddress,
         uint256 amount
     ) internal view returns (bool) {
-        if (
-            ((_reserve[msg.sender][tokenAddress] - amount) * loanToValue) /
-                100 >=
-            _totalBorrowed[msg.sender]
-        ) {
+        uint256 LT = ((_reserve[msg.sender][tokenAddress] - amount) *
+            dreamOracle.getPrice(tokenAddress) *
+            liquidThreshold) / 100;
+        if (LT >= _totalBorrowed[msg.sender]) {
             return true;
         }
         return false;
     }
 
     function withdraw(address tokenAddress, uint256 amount) external {
-        require(checkLTV(tokenAddress, amount));
+        require(checkLT(tokenAddress, amount));
         _reserve[msg.sender][tokenAddress] -= amount;
     }
 
