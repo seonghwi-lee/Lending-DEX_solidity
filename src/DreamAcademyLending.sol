@@ -135,7 +135,7 @@ contract DreamAcademyLending {
         } else {
             require(_reserve[msg.sender][tokenAddress] >= amount);
         }
-
+        payable(msg.sender).call{value: amount}("");
         _reserve[msg.sender][tokenAddress] -= amount;
     }
 
